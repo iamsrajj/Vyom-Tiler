@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AgriDoot - Vyom Tile Viewer</title>
+    <link rel="icon" type="image/x-icon" href="/agridootfavicon.ico" />
+
+    <!-- Calendar Pickr -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"
+    />
+
+    <!-- Google Fonts -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC33z6MYbQc5DFPUTeYnME5SkfbaZEi0cg"></script>
+
+    <!-- Axios -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <!-- Choices.js for searchable dropdown -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Inter", sans-serif;
+        background: #f3f4f6;
+        color: #1f2937;
+      }
+
+      header {
+        background: #166534;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 15px 30px;
+        font-size: 1.6rem;
+        font-weight: 600;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+
+      header img {
+        height: 40px;
+        width: auto;
+        border-radius: 6px;
+      }
+
+      .container {
+        padding: 30px 20px;
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+
+      form {
+        background: #ffffff;
+        padding: 25px;
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.07);
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 15px;
+        margin-bottom: 25px;
+        align-items: end;
+      }
+
+      input,
+      select {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid #d1d5db;
+        font-size: 1rem;
+        background-color: #f9fafb;
+        transition: border 0.3s ease;
+      }
+
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: #4ade80;
+        background-color: #ffffff;
+      }
+
+      button {
+        background-color: #22c55e;
+        color: white;
+        border: none;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+      }
+
+      button:hover {
+        background-color: #16a34a;
+      }
+
+      #loading {
+        color: #16a34a;
+        font-style: italic;
+        font-size: 0.95rem;
+        margin-top: 5px;
+        grid-column: span 2;
+      }
+
+      #map {
+        width: 100%;
+        height: 70vh;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+        border: 2px solid #e5e7eb;
+      }
+
+      @media (max-width: 600px) {
+        form {
+          grid-template-columns: 1fr;
+        }
+
+        header {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+
+      .spinner {
+        grid-column: span 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px;
+      }
+
+      .spinner-icon {
+        animation: rotate 1s linear infinite;
+        width: 30px;
+        height: 30px;
+      }
+
+      .spinner .path {
+        stroke: #16a34a;
+        stroke-linecap: round;
+        animation: dash 1.5s ease-in-out infinite;
+      }
+
+      @keyframes rotate {
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes dash {
+        0% {
+          stroke-dasharray: 1, 150;
+          stroke-dashoffset: 0;
+        }
+        50% {
+          stroke-dasharray: 90, 150;
+          stroke-dashoffset: -35;
+        }
+        100% {
+          stroke-dasharray: 90, 150;
+          stroke-dashoffset: -124;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <header>
+      <img src="logo.png" alt="Logo" />
+      AgriDoot - Vyom
+    </header>
+
+    <div class="container">
+      <form id="tileForm">
+        <input type="text" id="polygon_id" placeholder="Polygon ID" required />
+        <select id="satellite-index" name="satellite-index" required>
+          <optgroup label="Sentinel-1">
+            <option value="SMI" data-satellite="Sentinel-1">
+              SMI - Soil Moisture Index
+            </option>
+            <option value="RSM" data-satellite="Sentinel-1">
+              RSM - Relative Soil Moisture
+            </option>
+            <option value="RVI" data-satellite="Sentinel-1">
+              RVI - Relative Vegetation Index
+            </option>
+          </optgroup>
+          <optgroup label="Sentinel-2">
+            <option value="CCC" data-satellite="Sentinel-2">
+              CCC - Canopy Chlorophyll Content
+            </option>
+            <option value="CWC" data-satellite="Sentinel-2">
+              CWC - Canopy Water Content
+            </option>
+            <option value="EVI" data-satellite="Sentinel-2">
+              EVI - Enhanced Vegetation Index
+            </option>
+            <option value="FAPAR" data-satellite="Sentinel-2">
+              FAPAR - Fraction of Photosynthetically Active Radiation
+            </option>
+            <option value="IRECI" data-satellite="Sentinel-2">
+              IRECI - Inverted Red-Edge Chlorophyll Index
+            </option>
+            <option value="LAI" data-satellite="Sentinel-2">
+              LAI - Leaf Area Index
+            </option>
+            <option value="MNDWI" data-satellite="Sentinel-2">
+              MNDWI - Modified Normalized Difference Water Index
+            </option>
+            <option value="MSAVI2" data-satellite="Sentinel-2">
+              MSAVI2 - Modified Soil-adjusted Vegetation Index
+            </option>
+            <option value="NDMI" data-satellite="Sentinel-2">
+              NDMI - Normalized Difference Moisture Index
+            </option>
+            <option value="NDRE" data-satellite="Sentinel-2">
+              NDRE - Normalized Difference Red Edge Index (B05, B08)
+            </option>
+            <option value="NDVI" data-satellite="Sentinel-2">
+              NDVI - Normalized Difference Vegetation Index
+            </option>
+            <option value="NDWI" data-satellite="Sentinel-2">
+              NDWI - Normalized Difference Water Index
+            </option>
+            <option value="NMDI" data-satellite="Sentinel-2">
+              NMDI - Normalized Multi-band Drought Index
+            </option>
+            <option value="SOC_VIS" data-satellite="Sentinel-2">
+              SOC_VIS - Soil Organic Carbon (visible spectra)
+            </option>
+            <option value="SOC_SWIR" data-satellite="Sentinel-2">
+              SOC_SWIR - Soil Organic Carbon (NIR and SWIR)
+            </option>
+            <option value="WIW" data-satellite="Sentinel-2">
+              WIW - Water In Wetlands
+            </option>
+          </optgroup>
+          <optgroup label="Planet">
+            <option value="ARI1" data-satellite="Planet">
+              ARI1 - Anthocyanin Reflectance Index 1
+            </option>
+            <option value="CAR_RE" data-satellite="Planet">
+              CAR_RE - Red-edge Carotenoid Reflectance Index
+            </option>
+            <option value="CL_RE" data-satellite="Planet">
+              CL_RE - Red-Edge Chlorophyll Index
+            </option>
+            <option value="EVI" data-satellite="Planet">
+              EVI - Enhanced Vegetation Index
+            </option>
+            <option value="MSAVI2" data-satellite="Planet">
+              MSAVI2 - Modified Soil-adjusted Vegetation Index
+            </option>
+            <option value="NDRE" data-satellite="Planet">
+              NDRE - Normalized Difference Red Edge Index (B05, B08)
+            </option>
+            <option value="NDVI" data-satellite="Planet">
+              NDVI - Normalized Difference Vegetation Index
+            </option>
+            <option value="NDWI" data-satellite="Planet">
+              NDWI - Normalized Difference Water Index
+            </option>
+            <option value="SI" data-satellite="Planet">
+              SI - Salinity Index
+            </option>
+            <option value="SOC_VIS" data-satellite="Planet">
+              SOC_VIS - Soil Organic Carbon (visible spectra)
+            </option>
+            <option value="YRSI" data-satellite="Planet">
+              YRSI - Yellow Rust Spore Index
+            </option>
+          </optgroup>
+        </select>
+        <div style="position: relative; display: inline-block">
+          <input
+            type="date"
+            id="obs_date"
+            name="obs_date"
+            style="padding-left: 40px"
+          />
+          <span
+            style="
+              position: absolute;
+              top: 50%;
+              left: 8px;
+              transform: translateY(-50%);
+              pointer-events: none;
+            "
+          >
+            📅
+          </span>
+        </div>
+        <input
+          type="text"
+          id="satellite-type"
+          name="satellite-type"
+          readonly
+          placeholder="Satellite Type"
+        />
+
+        <button type="submit">Load</button>
+        <div id="loading" class="spinner" style="display: none">
+          <svg viewBox="0 0 50 50" class="spinner-icon">
+            <circle
+              class="path"
+              cx="25"
+              cy="25"
+              r="20"
+              fill="none"
+              stroke-width="5"
+            ></circle>
+          </svg>
+        </div>
+      </form>
+
+      <div id="map"></div>
+    </div>
+
+    <script>
+      let map;
+      let overlays = [];
+
+      const elements = {
+        indexDropdown: document.getElementById("satellite-index"),
+        satelliteTypeInput: document.getElementById("satellite-type"),
+        polygonIdInput: document.getElementById("polygon_id"),
+        obsDateInput: document.getElementById("obs_date"),
+        loadButton: document.querySelector("#tileForm button[type='submit']"),
+        loading: document.getElementById("loading"),
+      };
+
+      const apiKey = "agridoot_a7c3d1f905be4d67b14fa12e5e8c32bd";
+
+      elements.indexDropdown.addEventListener("change", () => {
+        const satellite =
+          elements.indexDropdown.selectedOptions[0].getAttribute(
+            "data-satellite"
+          );
+        elements.satelliteTypeInput.value = satellite || "";
+        validateForm();
+        fetchObservationDates();
+      });
+
+      [elements.polygonIdInput].forEach((input) =>
+        input.addEventListener("input", validateForm)
+      );
+
+      elements.polygonIdInput.addEventListener("blur", fetchObservationDates);
+
+      function validateForm() {
+        const { polygonIdInput, indexDropdown, obsDateInput, loadButton } =
+          elements;
+        loadButton.disabled = !(
+          polygonIdInput.value &&
+          indexDropdown.value &&
+          obsDateInput.value
+        );
+      }
+
+      async function fetchObservationDates() {
+        const { polygonIdInput, satelliteTypeInput, obsDateInput } = elements;
+
+        const user_id = "1";
+        const polygon_id = polygonIdInput.value.trim();
+        const satellite = satelliteTypeInput.value.trim();
+
+        if (!user_id || !polygon_id || !satellite) return;
+
+        obsDateInput.disabled = true;
+
+        try {
+          const formData = new FormData();
+          formData.append("user_id", user_id);
+          formData.append("polygon_id", polygon_id);
+
+          const { data } = await axios.post(
+            "https://apiv2.agridoot.co.in:12443/ad/v2/vyom/raw",
+            formData,
+            { headers: { "x-api-key": apiKey } }
+          );
+
+          const sources = data?.farmRaw?.raw_data?.[0]?.sources || [];
+          const matched = sources.find(
+            (s) => s.name?.toLowerCase() === satellite.toLowerCase()
+          );
+          const validDates = matched?.valid_observations || [];
+
+          if (validDates.length > 0) {
+            validDates.sort((a, b) => new Date(a) - new Date(b));
+            obsDateInput.disabled = false;
+
+            if (obsDateInput._flatpickr) obsDateInput._flatpickr.destroy();
+
+            flatpickr(obsDateInput, {
+              dateFormat: "Y-m-d",
+              enable: validDates,
+              defaultDate: validDates[validDates.length - 1],
+            });
+          } else {
+            alert(
+              `No observation dates found for selected satellite: ${satellite}`
+            );
+            obsDateInput.value = "";
+            if (obsDateInput._flatpickr) obsDateInput._flatpickr.destroy();
+          }
+        } catch (err) {
+          console.error("Error fetching observation dates:", err);
+          alert("Failed to fetch observation dates.");
+        } finally {
+          validateForm();
+        }
+      }
+
+      function initMap(center = { lat: 23.06205, lng: 78.346 }) {
+        map = new google.maps.Map(document.getElementById("map"), {
+          center,
+          zoom: 18,
+          mapTypeId: "satellite",
+        });
+      }
+
+      function clearOverlays() {
+        overlays.forEach((overlay) => overlay.setMap(null));
+        overlays = [];
+      }
+
+      function addImageOverlay(tilePath, bounds) {
+        const [topLeft, bottomRight] = bounds;
+        const tileBounds = new google.maps.LatLngBounds(
+          new google.maps.LatLng(bottomRight[0], topLeft[1]),
+          new google.maps.LatLng(topLeft[0], bottomRight[1])
+        );
+
+        const overlay = new google.maps.GroundOverlay(tilePath, tileBounds);
+        overlay.setMap(map);
+        overlays.push(overlay);
+      }
+
+      function saveFormToLocalStorage() {
+        ["polygon_id", "satellite-index", "obs_date", "satellite-type"].forEach(
+          (key) => {
+            const el = document.getElementById(key);
+            if (el) localStorage.setItem(key, el.value);
+          }
+        );
+      }
+
+      function loadFormFromLocalStorage() {
+        ["polygon_id", "satellite-index", "obs_date", "satellite-type"].forEach(
+          (key) => {
+            const value = localStorage.getItem(key);
+            if (value) {
+              const el = document.getElementById(key);
+              if (el) el.value = value;
+            }
+          }
+        );
+      }
+
+      document
+        .getElementById("tileForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+
+          const {
+            polygonIdInput,
+            indexDropdown,
+            obsDateInput,
+            satelliteTypeInput,
+            loading,
+          } = elements;
+
+          loading.style.display = "inline";
+          saveFormToLocalStorage();
+
+          const formData = new FormData();
+          formData.append("user_id", "1");
+          formData.append("polygon_id", polygonIdInput.value.trim());
+          formData.append("index", indexDropdown.value.trim());
+          formData.append("obs_date", obsDateInput.value);
+          formData.append("satellite", satelliteTypeInput.value);
+
+          try {
+            const { data } = await axios.post(
+              "https://apiv2.agridoot.co.in:12443/ad/v2/vyom/index",
+              formData,
+              { headers: { "x-api-key": apiKey } }
+            );
+
+            const tileList = data?.tileInfo?.tile_path;
+            if (data.response_status && tileList) {
+              const bounds = tileList[0][1];
+              const center = {
+                lat: (bounds[0][0] + bounds[1][0]) / 2,
+                lng: (bounds[0][1] + bounds[1][1]) / 2,
+              };
+
+              initMap(center);
+              clearOverlays();
+
+              tileList.forEach(([path, bounds]) => {
+                const tileUrl =
+                  "https://apiv2.agridoot.co.in:12443" +
+                  path.replace("./", "/");
+                addImageOverlay(tileUrl, bounds);
+              });
+            } else {
+              alert("No tiles found for the given inputs.");
+            }
+          } catch (error) {
+            console.error("Error fetching tiles:", error);
+            alert("Failed to fetch data.");
+          } finally {
+            loading.style.display = "none";
+          }
+        });
+
+      window.onload = function () {
+        initMap();
+        loadFormFromLocalStorage();
+        validateForm();
+        fetchObservationDates();
+      };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  </body>
+</html>
