@@ -17,7 +17,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
       rel="stylesheet"
     />
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC33z6MYbQc5DFPUTeYnME5SkfbaZEi0cg"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDcL2lW9ccI9gQj8evpE7-npp57w_XULSY"></script>
 
     <!-- Axios -->
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
@@ -190,6 +190,10 @@
     <div class="container">
       <form id="tileForm">
         <input type="text" id="polygon_id" placeholder="Polygon ID" required />
+        <select id="plan_variant" name="plan_variant" required>
+          <option value="gold" selected>Gold</option>
+          <option value="platinum">Platinum</option>
+        </select>
         <select id="satellite-index" name="satellite-index" required>
           <optgroup label="Sentinel-1">
             <option value="SMI" data-satellite="Sentinel-1">
@@ -340,13 +344,15 @@
       const elements = {
         indexDropdown: document.getElementById("satellite-index"),
         satelliteTypeInput: document.getElementById("satellite-type"),
+        planVariantInput: document.getElementById("plan_variant"),
         polygonIdInput: document.getElementById("polygon_id"),
         obsDateInput: document.getElementById("obs_date"),
         loadButton: document.querySelector("#tileForm button[type='submit']"),
         loading: document.getElementById("loading"),
       };
 
-      const apiKey = "agridoot_a7c3d1f905be4d67b14fa12e5e8c32bd";
+      // NOTE: api key removed as requested (using novo's endpoints without x-api-key)
+      const novoBase = "https://api.novosedge.xyz:4433";
 
       elements.indexDropdown.addEventListener("change", () => {
         const satellite =
@@ -375,11 +381,17 @@
       }
 
       async function fetchObservationDates() {
-        const { polygonIdInput, satelliteTypeInput, obsDateInput } = elements;
+        const {
+          polygonIdInput,
+          satelliteTypeInput,
+          obsDateInput,
+          planVariantInput,
+        } = elements;
 
         const user_id = "1";
         const polygon_id = polygonIdInput.value.trim();
         const satellite = satelliteTypeInput.value.trim();
+        const plan_variant = planVariantInput?.value?.trim() || "";
 
         if (!user_id || !polygon_id || !satellite) return;
 
@@ -389,12 +401,11 @@
           const formData = new FormData();
           formData.append("user_id", user_id);
           formData.append("polygon_id", polygon_id);
+          // include plan_variant per your request
+          if (plan_variant) formData.append("plan_variant", plan_variant);
 
-          const { data } = await axios.post(
-            "https://apiv2.agridoot.co.in:12443/ad/v2/vyom/raw",
-            formData,
-            { headers: { "x-api-key": apiKey } }
-          );
+          const resp = await axios.post(`${novoBase}/gis/raw`, formData);
+          const data = resp.data || {};
 
           const sources = data?.farmRaw?.raw_data?.[0]?.sources || [];
           const matched = sources.find(
@@ -403,6 +414,7 @@
           const validDates = matched?.valid_observations || [];
 
           if (validDates.length > 0) {
+            // sort ascending
             validDates.sort((a, b) => new Date(a) - new Date(b));
             obsDateInput.disabled = false;
 
@@ -454,24 +466,32 @@
       }
 
       function saveFormToLocalStorage() {
-        ["polygon_id", "satellite-index", "obs_date", "satellite-type"].forEach(
-          (key) => {
-            const el = document.getElementById(key);
-            if (el) localStorage.setItem(key, el.value);
-          }
-        );
+        [
+          "polygon_id",
+          "satellite-index",
+          "obs_date",
+          "satellite-type",
+          "plan_variant",
+        ].forEach((key) => {
+          const el = document.getElementById(key);
+          if (el) localStorage.setItem(key, el.value);
+        });
       }
 
       function loadFormFromLocalStorage() {
-        ["polygon_id", "satellite-index", "obs_date", "satellite-type"].forEach(
-          (key) => {
-            const value = localStorage.getItem(key);
-            if (value) {
-              const el = document.getElementById(key);
-              if (el) el.value = value;
-            }
+        [
+          "polygon_id",
+          "satellite-index",
+          "obs_date",
+          "satellite-type",
+          "plan_variant",
+        ].forEach((key) => {
+          const value = localStorage.getItem(key);
+          if (value) {
+            const el = document.getElementById(key);
+            if (el) el.value = value;
           }
-        );
+        });
       }
 
       document
@@ -484,6 +504,7 @@
             indexDropdown,
             obsDateInput,
             satelliteTypeInput,
+            planVariantInput,
             loading,
           } = elements;
 
@@ -497,15 +518,15 @@
           formData.append("obs_date", obsDateInput.value);
           formData.append("satellite", satelliteTypeInput.value);
 
+          const plan_variant = planVariantInput?.value?.trim() || "";
+          if (plan_variant) formData.append("plan_variant", plan_variant);
+
           try {
-            const { data } = await axios.post(
-              "https://apiv2.agridoot.co.in:12443/ad/v2/vyom/index",
-              formData,
-              { headers: { "x-api-key": apiKey } }
-            );
+            const resp = await axios.post(`${novoBase}/gis/tiles`, formData);
+            const data = resp.data || {};
 
             const tileList = data?.tileInfo?.tile_path;
-            if (data.response_status && tileList) {
+            if (data.response_status && tileList && tileList.length > 0) {
               const bounds = tileList[0][1];
               const center = {
                 lat: (bounds[0][0] + bounds[1][0]) / 2,
@@ -516,9 +537,9 @@
               clearOverlays();
 
               tileList.forEach(([path, bounds]) => {
-                const tileUrl =
-                  "https://apiv2.agridoot.co.in:12443" +
-                  path.replace("./", "/");
+                // build tile URL on novo base; keep the same replacement logic but adapt to novo base
+                // original paths often start with "./" so convert as before
+                const tileUrl = novoBase + path.replace("./", "/");
                 addImageOverlay(tileUrl, bounds);
               });
             } else {
@@ -539,6 +560,7 @@
         fetchObservationDates();
       };
     </script>
+
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   </body>
 </html>
